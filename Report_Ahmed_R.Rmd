@@ -1,0 +1,1771 @@
+---
+title: "Simulating Microfossil Samples"
+subtitle: "Part B template"
+author: "Rafay Ahmed"
+date: "2026-08-04"
+output:
+  pdf_document:
+      number_sections: true
+bibliography: references.bib
+geometry: "top=20mm, left=20mm, right=20mm, bottom=20mm"
+fontsize: 12pt
+header-includes:
+  - \usepackage{booktabs}
+  - \usepackage{float}
+  - \usepackage{colortbl}
+  - \floatplacement{figure}{H}
+  - \floatplacement{table}{H}
+---
+
+\newtheorem{theorem}{Theorem}
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo      = FALSE,
+  warning   = FALSE,
+  message   = FALSE,
+  fig.align = "center",
+  out.width = "90%",
+  fig.pos   = "H"
+)
+
+library(tibble)
+library(ggplot2)
+library(dplyr)
+library(knitr)
+library(kableExtra)
+library(patchwork)
+library(tidyr)
+
+# Load pre-computed results 
+
+grid_on       <- read.csv("./data/grid_on_final_2.csv")
+comp_baseline <- read.csv("./data/comparison_baseline_1.csv")
+comp_threshold <- read.csv("./data/comparison_threshold_10to800.csv")
+comp_ratio    <- read.csv("./data/comparison_ratio_2.csv")
+sim_est        <- read.csv("./data/sim_estimates_2.csv")
+sweep_on      <- read.csv("./data/sweep_on_10to800.csv")
+ied_df    <- read.csv("./data/ied_df.csv")
+pooled_nn <- read.csv("./data/pooled_nn.csv")
+theory_df <- read.csv("./data/theory_df.csv")
+
+# Shared parameters 
+col_off <- "steelblue"
+col_on  <- "darkorange"
+```
+
+Project supervisor: Anthony Mays
+
+# Declaration
+
+In submitting this work I am indicating that I have read the University's Academic Integrity Policy. I declare that all material in this assessment is my own work except where there is clear acknowledgement and reference to the work of others. I give permission for this work to be reproduced and submitted to other academic staff for educational purposes.
+
+# Abstract
+
+Scientists estimate the concentration of microfossils to understand past climate. To calculate the concentration, have to count the number of fossils inside the sediment. This is a manual-based process and is a time-demanding task. As sediments can contain many particles, they cannot count every single one; instead, they count a small portion, and with the help of a sampling technique called the linear counting method, whereby adding markers and scaling up, they can estimate the value. This report utilises a simulation to evaluate the effectiveness of the sampling technique and to examine how the error varies as the counting conditions are altered. A formula predicts the error of such estimates, and here it is tested inside a simulation. The simulation experiments of this study show that the estimation method proposed in this paper can accurately reproduce the true concentrations with no significant deviation. The matching error formula applies to all actual counting scenarios, including cases with or without marker variation. The total count of markers is the main factor determining estimation accuracy, while the proportion of fossils to markers has only a weak effect, and marker variation only adds a small, fixed error.
+
+
+\newpage
+
+# Introduction
+
+Earth's climate has changed significantly over geological time. To better understand the nature, magnitude and direction of climate change, it is important to observe and understand the processes that control them [@DaniauAnne-Laure2019Tpmi, p.2]. As there was no recorded data in the past, scientists have to use alternative data to reconstruct past vegetation and climate. Pollen grains are one such example that are produced by seed plants and are preserved in sediments from a range of different environments, including lakes marines and peatlands. [@YamanTutkuTuncal2024Anat, p.1].  
+
+The link between microfossils and climate is established through plant life. Vegetation plays an important role in the climate system; it is a major part of the biosphere and develops by responding to climate and soil characteristics  [@DaniauAnne-Laure2019Tpmi, p.2], making it an integral part of the biogeochemical and physical processes between the land surface and the atmosphere [@DaniauAnne-Laure2019Tpmi, p.2]. Climate change modifies vegetation, and its signature is recorded in the microfossil, for example, a shift from forest pollen types to grassland types, for instance, can reflect a change from a wetter to a drier climate [@ZARGARMOHAMMADABASS2025Pasa, p.43]. Each sediment layer corresponds to a different period, allowing researchers to create a chronological sequence of vegetative and climatic changes [@ZARGARMOHAMMADABASS2025Pasa]. By identifying and counting the remaining microfossils that are preserved in successive rock layers, scientists can deduce what plant communities were present at various times, and from that estimate past climate can be calculated quantitatively as numerically expressed as physical units such as degrees Celsius or millimetres of rainfall [@ChevalierManuel2020Pcrt, p.2].  
+
+Microfossil counting, after a century of methodological improvement, is still a manual-based process where a trained palynologist counts particles in a microscope slide. It is a very slow and difficult process [@YamanTutkuTuncal2024Anat, p.2], and as a sample can contain many particles, counting everything is simply not an option, since counting entire populations is generally impractical [@MaysChris2025FsAn, p.2]. Instead, scientists use a sampling technique where they count a small portion of the sample to represent the whole area. From only a few hundred counted grains, concentrations of thousands or even millions of specimens can be estimated [@MaysChris2025FsAn, p.4].  
+
+But to scale a partial count up, scientists require what fraction of the sample was examined, and they can’t tell by looking at the slide. The solution is to add a known amount of marker grains to the sample before it is prepared. These markers mix with the fossils, so the ratio between them in the small portion is equal to the ratio in the whole sample.
+This is where the gap opens. Scaling up works, but it is only as good as the count it is built on. If there are too few counts, the estimation could be unreliable, and if they count too many, it could take them a lot of time, so it won’t be as efficient. Somewhere between the two is where the palynologist should count.  
+
+The problem with answering it in a laboratory is that nobody can know the right answer: as scientists cannot count the whole sample, meaning they can never know the true value of the sample, hence they can never know how close their scaled estimation was. However, a simulation can, we can set up the true value ourselves and compare it with our estimation to know how close we are to the true value. 
+
+- How many times should the simulation be run to give a stable result?
+- Does the sampling technique give accurate estimates of concentration, compared with the known true value? 
+- How does the precision of the estimates change as the counting conditions are varied 
+- How much difference does it make that the number of markers added to the sample is not exactly known, but varies slightly? 
+
+
+# Background
+
+## Concentration as the key measurement
+The key variable to help scientists determine past climate using microfossils is concentration, which is the number of fossil grains per unit volume (or mass) of sediment, which tells us how much biological contributors added to a sediment or sedimentary rock [@MaysChris2025FsAn, p.2]. We use concentration instead of proportions (expressed as percentages), as the latter can be misleading. Proportions carry an issue inherent to them, known as compositional effect: because the proportions must always sum to the whole, a rise in the share of any category will lead to a fall in the other [@MaysChris2025FsAn, p.2]. For example, imagine a sediment sample containing 100 oak pollen grains and 100 pine pollen grains, thus both represent 50\% of the sample. We then look at a later sample, oak is still 100 grains, but pine has fallen to 50. The new percentages are at 67\% for oak and 33\% for pine, which makes it appear as if oak has increased, but in reality, it is that oak was unchanged, and pine simply decreased. This means a percentage change does not necessarily mean that the number of species also changed. Concentration is therefore the quantity this project sets out to estimate.
+
+## The counting problem
+As established above, the required quantity used is concentration, which is the number of fossils per unit volume. So, the first task is to find the number of fossils, which is done by counting.
+After processing a sediment sample in the laboratory, the residue is placed on a microscope slide. Counting every grain in the sample is simply not practical [@MaysChris2025FsAn, p.2]. 
+The solution would be to count a small region of the slide and scale up. For example, the palynologist counts every fossil in the small region and finds x of them. To turn x into a total representing the whole sample, they would need to multiply by the number of times that region divides into a whole slide, which we can call the scaling factor, or in simple terms, the ratio of the counted region to the whole slide. But they have no way of knowing what fraction of the sample that count represents.  
+
+## The marker spike solution
+The solution, first proposed by @Benninghoff1962, is to add a known amount of foreign particles called markers to the sediment sample before processing. Many different types of markers have been used over history, from using exotic pollen types through plastic beads to ceramic microsphere, the most widely used among them is the spore of the clubmoss Lycopodium clavatum [@MaysChris2025FsAn, p.3]. For the method to work, these foreign particles have to meet the following criteria:  
+
+- They have to be easily distinguishable from the indigenous micro fossils under the microscope; [@MaysChris2025FsAn,p.3]
+- They must behave exactly like the native microfossils, like having similar physical and chemical properties as the microfossils, so neither group is overrepresented, and they both mix evenly.  [@MaysChris2025FsAn, p.3]
+
+The second condition is the core reason that makes the scaling method valid. The scaling works only when the fossil-to-marker ratio in the small region matches the ratio in the whole sample. The first condition is more of a practical requirement for telling them apart when counting; it has no bearing on whether the ratio is correct. A marker must also be genuinely exotic; it must not occur naturally in the sample, or the added markers could not be distinguished from the ones already present in the sample. Once these conditions hold, the concentration follows directly. For example, if the counted region shows 20 fossils for every marker, and there are 20000 markers added to the sample, then the sample will contain $20 \times 20{,}000 = 400{,}000$ fossils in the sample. Dividing it by sample volume or mass gives concentration.
+ 
+## Marker tablets
+Marker grains were usually added in liquid form first. The markers were suspended in the liquid, and their average concentration per unit volume was measured. A fixed volume of the standard mixture was transferred with a pipette into each sediment sample, where the number of markers added was proportional to the volume of the mixed solution.
+Later, Stockmarr introduced a different method where essentially a consistent number of marker grains with a slight variability were created and contained in a tablet, which offered a far more convenient way of introducing marker grains than the older pipette method [@MaherLouisJ, p. 158]
+Each tablet contains, on average, 12,489 spores per tablet with a standard deviation of 491, giving a proportional standard deviation of $s_{1P} = 491/12{,}489 \approx 0.039$ [@MaherLouisJ, p. 158].
+
+The statistical theory for the concentration estimates was subsequently developed by @MaherLouisJ, who defined how uncertain such estimates are and gave formulas for that uncertainty. One such theory was the optimal target-to-marker ratio of 2:1 to achieve the most efficient balance between counting effort and precision [@MaherLouisJ, p. 158].
+
+## Linear Counting Method
+
+The linear method involves moving the microscope in a straight line along the narrow strip of the slide. As the strip moves across the slide, the fossils and markers are counted. The counting continues until the number of markers reaches a predetermined value, for example, 10 markers. The count is then stopped, and the fossil and marker counts are recorded. The area up to where the threshold marker is achieved is known as the window or strip of the slide, and the ratio of the fossil and markers represents the ratio for the whole sample slide.
+
+Figure \ref{fig:transect} shows how a linear counting method would simulate the scanning process: the red area
+represents the area that the scientist looks at through the microscope(counting area), and it expands as they
+count markers until they reach the stopping threshold.
+
+```{r transect, fig.cap="Simulated linear counting process.(Figure code Appendix B.1) \\label{fig:transect}", fig.height=4.5, fig.width=8}
+set.seed(7)
+n_t2 <- 2000; n_m2 <- 1000; sh <- 0.05
+tg2 <- tibble(x = runif(n_t2), y = runif(n_t2), type = "Target")
+mk2 <- tibble(x = runif(n_m2), y = runif(n_m2), type = "Marker")
+sl2 <- rbind(tg2, mk2)
+ms2 <- mk2[mk2$y <= sh, ]; ms2 <- ms2[order(ms2$x), ]
+
+snap <- function(k) {
+  xe <- ms2$x[k]
+  xc <- sum(tg2$y <= sh & tg2$x <= xe)
+  ggplot(sl2, aes(x, y, colour = type, shape = type, size = type)) +
+    geom_point(alpha = 0.5) +
+    scale_colour_manual(values = c(Target = "grey60", Marker = col_on), guide = "none") +
+    scale_shape_manual(values  = c(Target = 16, Marker = 18), guide = "none") +
+    scale_size_manual(values   = c(Target = 0.8, Marker = 2), guide = "none") +
+    annotate("rect", xmin = 0, xmax = xe, ymin = 0, ymax = sh,
+             colour = "red", fill = "red", alpha = 0.15, linewidth = 0.6) +
+    coord_cartesian(xlim = c(0, 0.25), ylim = c(0, 0.12)) +
+    theme_minimal(base_size = 9) +
+    labs(title    = sprintf("After %d markers", k),
+         subtitle = sprintf("fossils = %d", xc), x = "x", y = "y")
+}
+(snap(3) + snap(6)) / (snap(9) + snap(10)) +
+  plot_annotation(subtitle = "Red = counted region; grey = targets; orange = markers")
+```
+
+## The concentration estimator
+The linear method is used to simulate the counting process using the following equation [@MaysChris2025FsAn, p.3]
+\begin{equation}
+\hat{c} = \frac{x \cdot N_1 \cdot Y_1}{n \cdot V}
+\label{eq:concentration}
+\end{equation}
+
+where 
+
+- $x$ is the number of fossil grains counted.
+- $N_1$ is the number of exotic marker tablets added
+to the sample before processing.
+- $Y_1$ is the mean number of spores per tablet (so $N_1$ $\times$ $Y_1$ gives the
+total number of exotic marker spores added to the sample)
+- $n$ is the total number of marker grains
+counted on the slide.
+- $V$ is the total size of the sample, which can be expressed as a mass, area or volume.
+
+The logic behind the formula is that the fossil-to-marker ratio counted in the transect estimates the same ratio for the whole sample; multiplying by the known total marker dose scales this up to the corresponding number of fossils in the whole sample, and dividing it by V turns that count into a concentration.
+
+
+## The Poisson Point process
+
+The error formula (Equation \ref{eq:error}) rests on the assumption that the points scattered throughout the slide follow a homogeneous Poisson point process where the points are scattered completely at random. 
+
+Suppose N(A) is the number of grains in region A of area A, and $\lambda$ is the mean number of grains per unit area, as @alma99438058009071, p.61, defines this:   
+
+1. The count $N(A)$ in any region $A$ follows a Poisson distribution with mean $\lambda|A|$.
+2. Given $N(A) = n$, the $n$ grains are placed independently and uniformly at random over $A$.
+
+Two effects of this definition are used in the derivations that follow (\ref{eq:interevent} and \ref{eq:nn}). First, the Poisson count has variance equal to its mean since $\mathrm{Var}{N(A)}=\lambda|A|$ follows immediately from the first point, and second is counts in disjoint areas are independent, which Diggle derives from both equations 1 and 2 [@alma99438058009071 , p.61-63].
+
+As the simulation generates its own virtual slides to test whether the Poisson assumption holds, we compare the simulated slides against the two-distance-based distribution.
+The first is the distribution of distances between every pair of points, the inter-event distances. The distribution function that follows this is given by [@alma99438058009071, p.19] :
+
+\begin{equation}
+H(t) = \begin{cases}
+\pi t^2 - \dfrac{8t^3}{3} + \dfrac{t^4}{2}, & 0 \le t \le 1,\\[2ex]
+\dfrac{1}{3} - 2t^2 - \dfrac{t^4}{2} + \dfrac{4\sqrt{t^2-1}\,(2t^2+1)}{3} + 2t^2 \sin^{-1}\!\left(\dfrac{2}{t^2} - 1\right), & 1 < t \le \sqrt{2}.
+\end{cases}
+\label{eq:interevent}
+\end{equation}
+
+The second is the distribution of distances from the each point to its nearest neighbor. The nearest neighbor distance, which takes the form [@alma99438058009071 , p.24]: 
+
+\begin{equation}
+G(y) = 1 - \exp(-\lambda \pi y^2)
+\label{eq:nn}
+\end{equation}
+
+
+The equations (\ref{eq:interevent} and \ref{eq:nn}) are what we use as benchmarks to test whether simulated slides follow the Poisson process.
+
+## Error formula 
+Precision is predicted by the total error formula [@MaysChris2025FsAn, p.4]:
+
+\begin{equation}
+\sigma_L = 100\sqrt{\underbrace{\left(\frac{s_{1P}}{\sqrt{N_1}}\right)^2}_{\text{T}} + \underbrace{\left(\frac{1}{\sqrt{x}}\right)^2}_{\text{F}} + \underbrace{\left(\frac{1}{\sqrt{n}}\right)^2}_{\text{M}}}
+\label{eq:error}
+\end{equation}
+
+
+where $\sigma_L$ is the overall percentage error of the concentration estimate.
+Each term is a coefficient of variation: a standard deviation divided by its own mean, so that error can be expressed as a fraction of the count rather than as a number of grains. This matters a lot, for example, a scientist counted 20 grains, and he was off by 5, so the error is 25%, which is serious, but if that same error was for 2000 grains counted, the error would be 0.25%, so the same absolute miscount but very different consequences.
+
+The formula has three terms:  
+
+- Term F (fossil counting noise): Under poisson assumption, the fossil count in the window has variance equal to its mean, so a count of mean $x$ has standard deviation $\sqrt{x}$ and its coefficient of variation $\sqrt{x}/x = 1/\sqrt{x}$.
+- Term M (marker counting noise): The same argument can be applied to the marker count, which gives $1/\sqrt{n}$ captures the counting uncertainty in the marker count.
+- Term T (tablet variability): This error is associated with the manufacturing of the spore content of the tablet, which varies about its mean.
+The quantity $s_{1P}$ expresses this variability as a fraction of the mean; for Stockmarr’s tablets, $s_{1P} = 491/12{,}489 \approx 0.039$, meaning the markers count varies by about 3.9%. $s_{1P}/\sqrt{N_1}$ reflects the fact that different tablets have slightly different numbers of spores.
+Dividing by the number of tablets $\sqrt{N_1}$ reduces this variability as more tablets are averaged out.
+
+Note that both the terms, the number of markers and sometimes fossils, can be fixed, so then why is there an error associated with it is simply due to the contribution of the variable size of the counting window for the linear method, as the boundary falls wherever the last counted grain happens to lie, so the area examined varies at random.[@MaysChris2025FsAn, p.6]. As the three sources are independent, their squared Coefficient of variation adds to express it as a percentage, so we multiply it by 100.
+
+The formula gives us the predicted error. To compare it with the simulation one, we find it directly, as the standard deviation of the concentration estimates across the slides divided by their mean.
+
+\begin{equation}
+\sigma_{\text{sim}} = 100 \times \frac{\mathrm{SD}(\hat{c})}{\overline{\hat{c}}}
+\label{eq:simerror}
+\end{equation}
+
+where $\hat{c}$ are the per-slide concentration estimates, $\overline{\hat{c}}$
+their mean, and $\mathrm{SD}(\hat{c})$ their standard deviation.
+
+
+# Methods
+In the background, we discussed how a palynologist obtains concentration and how the error is estimated. This section now describes the simulation built to reproduce that process and the methods involved to answer the questions set out in the introduction. 
+
+The approach for the simulation goes as follows we first generate a virtual microscopic slide having fossils and markers,  derive the concentration estimates by following the manual counting (Linear counting method) as an analyst would count in a laboratory, do multiple repetitions for the same process to generate the distribution of these estimates whose spread can be compared against the total error formula and whose center can be compared against the true concentration.
+
+
+
+## The virtual slide 
+A slide is represented as a unit square. The fossil particles (also called targets) and marker spores are each placed independently at random. For each particle, we generate the x and y coordinates independently from a uniform distribution on [0,1], modelling a random scatter of points over the slide (a two-dimensional homogeneous Poisson point process) and together with the type (fossil or marker) is saved in a table. This mirrors the laboratory setting where both particle types can be visually distinguished, for example, in the simulation, the type column can be logically filtered to select one of the two particles at the moment of counting. The simulation assumes no counting errors: each particle is correctly labelled as either a target or a marker.
+
+Figure \ref{fig:slide} shows one simulated slide with 200 targets and 100 markers. The points are scattered uniformly without any visible pattern, consistent with the Poisson assumption.
+
+```{r slide, fig.cap="Simulated slide with 200 fossil targets (grey circles) and 100 markers (orange diamonds) following a homogeneous Poisson point process. (Figure code: Appendix B.2) \\label{fig:slide}", fig.height=3.8, fig.width=5}
+set.seed(42)
+sl <- rbind(
+  tibble(x = runif(200), y = runif(200), type = "Target"),
+  tibble(x = runif(100), y = runif(100), type = "Marker"))
+ggplot(sl, aes(x, y, colour = type, shape = type, size = type)) +
+  geom_point() +
+  scale_colour_manual(values = c(Target = "grey50", Marker = col_on)) +
+  scale_shape_manual(values  = c(Target = 16, Marker = 18)) +
+  scale_size_manual(values   = c(Target = 1.5, Marker = 2.5)) +
+  coord_equal() +
+  theme_minimal(base_size = 11) +
+  labs(x = "x", y = "y", colour = NULL, shape = NULL, size = NULL) +
+  theme(legend.position = "bottom")
+```
+
+## Linear Counting implementation 
+
+The Counting procedure follows the linear method described in the background, where a strip of fixed height is scanned from left to right, recording the counts of fossils and markers and stopping once a set number of markers has been seen.
+
+### Simulation Algorithm 
+1. Set the simulation parameters: the number of fossils (24,978), the number of markers on the slide (12,489), the strip height (0.05), the stopping threshold $k$ (100), the sample size $V$ (1), and the number of slides to simulate (10,000).
+2. Record the true concentration, calculated from the concentration formula, since the number of fossils is known in the simulation.
+3. For each simulated slide:
+    a. Scatter the targets and markers over the unit square.
+    b. Select the markers lying inside the strip and order them by $x$-coordinate.
+    c. If the strip contains fewer than $k$ markers, record the slide as failed and move on.
+    d. Otherwise, take the $x$-coordinate of the $k$th marker as the stopping point. This is the end boundary of the counted region, where the transect ends.
+    e. Count all particles whose $x$-coordinate is at or below this stopping point and whose $y$-coordinate is within the strip height.
+    f. Record the fossil count and the marker count.
+    g. Compute the concentration estimate from these two counts using Equation \ref{eq:concentration}.
+4. Repeat across all slides.
+
+It is worth knowing that the counted region window is not fixed in advance; its edge is wherever the kth marker happens to lie, hence the width of the region varies from slide to slide. 
+
+The full implementation is given in Appendix A.1
+
+It is to note that there is a possibility that in a real-world lab, the scientist could misidentify some markers due to human error; the simulation does not model this and assumes that each particle is correctly identified. This removes the statistical error of the method from the human error.
+
+## Verification of the Poisson assumption
+Before conducting the simulation for any analysis, the spatial randomness of the generated particles was verified against the two theoretical results from @alma99438058009071. This is an essential step because the total error formula (Equation \ref{eq:error}) is derived under the assumption that specimens follow a Poisson point process. If the simulation was unable to produce Poisson randomness, all the results and analyses conducted would be meaningless.
+
+1. Inter-event distance test: The pairwise distance of the generated particles was calculated and compared to Diggle’s theoretical cumulative distribution function(Equation \ref{eq:interevent}) for a homogeneous Poisson process[@alma99438058009071].
+2. Nearest-neighbour distance test: The distribution of nearest-neighbour distances was calculated and compared to Diggle’s theoretical distribution(Equation \ref{eq:nn}).
+
+The outcome of both tests is reported in the Results.
+
+### Poisson verification algorithm
+
+1. Set the verification parameters: the number of points per pattern (100) and the
+   number of patterns to simulate (50).
+2. Inter-event distances. For each simulated pattern:
+    a. Scatter the points over the unit square, drawing all coordinates from $U(0,1)$.
+    b. Compute the distance between every pair of points.
+3. Combine the inter-event distances from all patterns, sort them, and form their
+   empirical cumulative distribution. Compare this against the theoretical distribution
+   of Equation \ref{eq:interevent}.
+4. Nearest-neighbor distances. For each simulated pattern:
+    a. Scatter the points over the unit square, drawing all coordinates from $U(0,1)$.
+    b. Compute each point's distance to its nearest neighbor.
+5. Combine the nearest-neighbor distances from all patterns and compare their
+   distribution against the theoretical density of Equation \ref{eq:nn}.
+
+The full implementation is given in Appendix A.2
+
+It is to note that this assumes that the specimens follow a homogenous poison process. Real-world slides do not behave so simply: the particles could clump together or spread unevenly during the preparations[@MaysChris2025FsAn, p. 28]. This assumption is used due to the condition of the error formula, so the simulation can test the formula on ideal slides.
+
+## Tablet variability extension
+
+To test and verify whether the error formula (Equation \ref{eq:error}) correctly predicts error by introducing the tablet variability T = 0.039, as this term was derived theoretically and never verified against a simulation where the dose is varied, we check whether the prediction is correct.
+
+To introduce realistic tablet variability, only one part changes; the fixed marker count is replaced with a normally distributed value drawn around the label value,
+$$n_{\text{actual},s} \sim \text{Normal}\left(\mu = N_1 Y_1,\; \sigma = s_{1P} \times N_1 Y_1\right)$$
+where $N_1 Y_1 = 12489$ is the label value and $s_{1P} = 0.039$ from @MaherLouisJ 
+The rest of the steps remain the same
+
+The justification for why the tablet is drawn normally is because of a theorem called the central limit theorem, which states that for a sufficiently large sample (30 or more), the sample mean is approximately normally distributed regardless of the distribution of the population with standard deviation $\frac{\sigma}{\sqrt{n}}$ where $n$ is the sample size. [@alma9923698709071, p. 260].The simulation in this study uses the dosage setting of one tablet per single slide, so in the formula, the reduction effect of $N_1$ is never enabled.
+
+
+### Tablet variability algorithm
+
+1. Set the simulation parameters: the number of fossils (24,978), the number of markers on the slide (12,489), the strip height (0.05), the stopping threshold $k = 100$, the sample size $V$ (1), and the number of slides to simulate (10,000).
+2. Record the true concentration, calculated from the concentration formula, since the number of fossils is known in the simulation.
+3. For each simulated slide:
+    a. For the tablet variability, draw the number of markers from a Normal distribution with mean 12,489 and standard deviation 491.
+    b. Scatter the targets and markers over the unit square.
+    c. Select the markers lying inside the strip and order them by $x$-coordinate.
+    d. If the strip contains fewer than $k$ markers, record the slide as failed and move on.
+    e. Otherwise, take the $x$-coordinate of the $k$th marker as the stopping point. This is the end boundary of the counted region, where the transect ends.
+    f. Count all particles whose $x$-coordinate is at or below this stopping point and whose $y$-coordinate is within the strip height.
+    g. Record the fossil count and the marker count.
+    h. Compute the concentration estimate from these two counts using Equation \ref{eq:concentration}.
+4. Repeat step 3 across all slides.
+5. Calculate the mean concentration estimate, the relative error, the formula error from Equation \ref{eq:error}, and compare it with the simulated error.
+
+The full implementation is given in Appendix A.1
+
+## Experiment 1: Determining the number of simulated slides
+All the results of this study are calculated based on the average values of the many simulated slides, so the number of slides is the core parameter that needs to be justified. Too few slides and the estimated values would not have been settled down, and if too many, it would slow down computation without any gain in information. This section will determine how we chose that number.
+The summary measurement used was the root mean squared error of the estimates against the known true concentration.
+
+### RMSE equation 
+RMSE was chosen as it captures both the bias and the variance of the estimate. The process is the same as the linear counting method; the difference is that the estimate from each slide is stored separately. The convergence plot is built from these stored estimates with RMSE recalculated for each slide n from 1 to 20000 and then plotted against n.
+
+\begin{equation}
+\mathrm{RMSE}(n) = \sqrt{\frac{1}{n}\sum_{s=1}^{n}\left(\hat{c}_s - c_{\text{true}}\right)^2}
+\label{eq:rmse}
+\end{equation}
+
+### Convergence algorithm 
+1. Set the simulation parameters: the number of markers on the slide (12,489), the strip height (0.05), the sample size $V$ (1), and the number of slides to simulate (20,000).
+2. Record the true concentration.
+3. For each simulated slide:
+    a. Scatter the targets and markers over the unit square.
+    b. Select the markers lying inside the strip and order them by $x$-coordinate.
+    c. If the strip contains fewer than $k$ markers, record the slide as failed and move on.
+    d. Otherwise, take the $x$-coordinate of the $k$th marker as the stopping point. This is the end boundary of the counted region, representing where the microscope would stop scrolling.
+    e. Count all particles whose $x$-coordinate is at or below this stopping point and whose $y$-coordinate is within the strip height.
+    f. Record the fossil count and the marker count.
+    g. Compute the concentration estimate from these two counts using Equation \ref{eq:concentration}.
+    h. Store the slide's estimate.
+4. Repeat step 3 across all slides, then save the stored estimates to a file.
+5. For each $n$ from 1 up to the total number of slides (20,000):
+    a. Take the first $n$ estimates.
+    b. Calculate the RMSE using Equation \ref{eq:rmse}.
+    c. Express the RMSE as a percentage of the true concentration and record it.
+6. Plot the RMSE against the number of slides. 
+
+The full convergence code is in Appendix A.6.
+
+## Experiment 2: varying the parameters
+
+We now vary two parameters: the stopping threshold and the target-to-marker ratio.
+
+This is done in two ways, First we vary them individually on their own to observe the individual effects in more detail. Secondly, we vary both of them across a grid to see how it combines. The measurement used throughout is simulated error.
+For the threshold, the values range are:
+
+$$k \in \{10,\ 25,\ 50,\ 100,\ 200,\ 400,\ 500,\ 600,\ 700,\ 800\}$$
+
+and the target-to-marker ratio takes the values:
+
+$$r \in \{1,\ 2,\ 3,\ 6,\ 10,\ 30,\ 60\}.$$
+
+The grid, which runs every combination of both parameters, was limited to a threshold of up-to 400 to keep the computation manageable.
+
+The specific range of values was chosen based on two things: spacing and their range. For the threshold, the lower value of 10 was chosen as it gives an unstable estimate, as the marker's value is so small that a single count can disrupt the estimate, while the upper bound was selected such that the count is achievable when a palynologist counts in a lab. Each value was roughly double or triple that of the last rather than at equal intervals because the precision depends on the square root of count  $1/\sqrt{k}$, hence geometrically spaced values produce evenly spaced changes in precison while if it was equally spaced they would cluster where little changes. Higher values are chosen far enough to show where the effect plateaus.
+
+For the ratio, we use the lower ranges (1,2,3), as Maher recommends using ratio 2 (@MaherLouisJ, p.158), and other literature recommends below 5:1 (@MaysChris2025FsAn, p. 4), and then we use higher ranges to check how the precision plateaus.  
+
+
+### Grid algorithm
+1. For each ratio r 
+2. Set the target population to r x marker population 
+3. for each threshold k 
+    a. Repeat the counting algorithm 
+4. Record the mean estimate, relative error, simulated error and formula error.
+
+The individual sweeps use the same procedure with one parameter fixed and the other varied: The threshold sweep varies k with the ratio fixed at 2. While for the ratio, the threshold is fixed at $k=100$ and the ratio varies.
+
+The full grid code is in Appendix B. 5. The individual sweep code is in A.3 and A.4. 
+
+
+
+# Results
+## Linear Counting Process
+
+Table \ref{tab:tbl1} shows the output of the linear counting simulation described in the Methods, run over 10,000 slides, at a stopping threshold of k=100. For each run, the simulation produces an estimated concentration and its error, both measured directly from the simulated slides and predicted by the formula (Equation \ref{eq:error}). The true concentration set in the simulation is included for comparison, and each quantity is shown with and without tablet variability. (See appendix A.1 and B.3)
+
+
+```{r tbl1}
+comp_baseline |>
+  slice(1, 2, 3, 4, 5) |>
+  mutate(quantity = c("True concentration",
+                      "Estimated concentration",
+                      "Relative error of estimate (%)",
+                      "Simulated error (%)",
+                      "Formula error (%)")) |>
+  kbl(
+    col.names = c("Quantity", "Without tablet error", "With tablet error"),
+    align     = c("l", "r", "r"),
+    booktabs  = TRUE,
+    caption   = "Output of the linear counting simulation, with and without tablet variability. \\label{tab:tbl1}"
+  ) |>
+  kable_styling(latex_options = c("striped", "Hold_position"), font_size = 10)
+
+```
+
+## Poisson verification
+
+Figure \ref{fig:poisson} shows a verification test for Poisson described in the methods. The top panel compares the empirical cumulative distribution of inter-event distances against Diggle's theoretical distribution; the bottom panel compares the distribution of nearest-neighbour distances against the theoretical Poisson density (\ref{eq:nn}). (See Appendix A.2 and B.4)
+
+```{r poisson, fig.cap="Verification of the Poisson assumption. Top: empirical CDF of inter-event distances (blue) against the theoretical distribution (red). Bottom: distribution of nearest-neighbour distances (histogram) with the theoretical density (red). \\label{fig:poisson}", fig.height=3, fig.width=5, out.width="80%"}
+
+p1 <- ggplot(ied_df, aes(x = d)) +
+  geom_step(aes(y = emp), colour = col_off, linewidth = 0.9) +
+  geom_line(aes(y = th),  colour = "red",   linewidth = 1) +
+  labs(title    = "Inter-event distances",
+       subtitle = "Blue = empirical CDF, Red = Theoretical",
+       x = "Distance t", y = "H(t)") +
+  theme_minimal(base_size = 7)
+
+p3 <- ggplot(pooled_nn, aes(x = nn)) +
+  geom_histogram(aes(y = after_stat(density)),
+                 bins = 40, fill = "lightblue",
+                 colour = "black", linewidth = 0.2) +
+  geom_line(data = theory_df, aes(x = y, y = density),
+            colour = "red", linewidth = 1) +
+  labs(title    = "Nearest-neighbour distance distribution",
+       subtitle = "Histogram = empirical, Red = Theoretical Poisson density ",
+       x = "Nearest-neighbour distance y", y = "Density") +
+  theme_minimal(base_size = 7)
+
+p1 / p3
+```
+
+## Stopping threshold sweep
+
+Figure \ref{fig:fig5} and Table \ref{tab:tbl3} shows the simulated and formula error against the stopping threshold, from $k=10$ to $800$, with and without tablet variability. For each threshold, the error is measured directly from the simulation and predicted by the formula (Equation \ref{eq:error}). (See Appendix A.3 and B.5)
+
+```{r tbl3}
+comp_threshold |>
+  select(threshold, cv_off, pred_off, acc_cv_off, cv_on, pred_on, acc_cv_on) |>
+  kbl(
+    col.names = c("$k$",
+                  "Simulated (\\%)", "Formula (\\%)", "Relative Difference (\\%)",
+                  "Simulated (\\%)", "Formula (\\%)", "Relative Difference (\\%)"),
+    align    = rep("r", 7),
+    booktabs = TRUE,
+    escape   = FALSE,
+    caption  = "Error against the stopping threshold, measured from the simulation and predicted by the formula, with and without tablet variability. The final column in each pair is the relative difference between the two. \\label{tab:tbl3}"
+  ) |>
+  kable_styling(latex_options = c("striped", "hold_position", "scale_down"),
+                font_size = 9) |>
+  add_header_above(c(" " = 1,
+                     "Without tablet error" = 3,
+                     "With tablet error" = 3))
+```
+
+
+
+
+Figure \ref{fig:fig5} shows the error against the stopping threshold for both conditions. (See Appendix A.3 and B.6) 
+
+
+
+```{r fig5, fig.cap="Error against the stopping threshold, with and without tablet variability. Points show the error measured from the simulation; lines show the error predicted by the formula. \\label{fig:fig5}", fig.height=4}
+both_thresh <- bind_rows(
+  comp_threshold |> mutate(scenario = "Without tablet error", emp = cv_off, pred = pred_off),
+  comp_threshold |> mutate(scenario = "With tablet error",    emp = cv_on,  pred = pred_on)
+) |> select(threshold, scenario, emp, pred)
+
+ggplot(both_thresh, aes(x = threshold, colour = scenario)) +
+  geom_vline(xintercept = 500, linetype = "dotted", colour = "grey40") +
+  geom_line(aes(y = pred), linewidth = 0.9) +
+  geom_point(aes(y = emp), size = 2.6) +
+  scale_colour_manual(values = c("Without tablet error" = col_off,
+                                 "With tablet error"    = col_on)) +
+  scale_x_log10(breaks = c(10, 25, 50, 100, 200, 400, 800)) +
+  labs(x = "Stopping threshold k (log scale)",
+       y = "Error (%)",
+       colour = NULL) +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom")
+```
+
+
+
+## Target-to-marker ratio sweep
+
+Figure \ref{fig:fig7} and Table \ref{tab:tbl4} show the error against the target-to-marker ratio, with the stopping threshold fixed at k = 100, with and without tablet variability. For each ratio, the error is measured from the simulation and predicted by the formula (See Appendix A.4, B.7 and B.8)
+
+```{r tbl4}
+comp_ratio |>
+  select(ratio, cv_off, pred_off,cv_error_off, cv_on, pred_on,cv_error_on) |>
+  kbl(
+    col.names = c("Ratio",
+                  "Simulated error (\\%)", "Formula error (\\%)","Relative Difference (\\%)",
+                  "Simulated error (\\%)", "Formula error (\\%)","Relative Difference (\\%)"),
+    align    = c("r", "r", "r", "r", "r"),
+    booktabs = TRUE,
+    escape   = FALSE,
+    caption  = "Error against the target-to-marker ratio, measured from the simulation and predicted by the formula, with and without tablet variability. \\label{tab:tbl4}"
+  ) |>
+  kable_styling(latex_options = c("striped", "hold_position", "scale_down"),
+                font_size = 9) |>
+  add_header_above(c(" " = 1,
+                     "Without tablet error" = 3,
+                     "With tablet error" = 3))
+```
+  
+    
+
+
+
+
+```{r fig7, fig.cap="Error against the target-to-marker ratio, with and without tablet variability. Points show the error measured from the simulation; lines show the error predicted by the formula. \\label{fig:fig7}", fig.height=4}
+both_ratio <- bind_rows(
+  comp_ratio |> mutate(scenario = "Without tablet error", emp = cv_off, pred = pred_off),
+  comp_ratio |> mutate(scenario = "With tablet error",    emp = cv_on,  pred = pred_on)
+) |> select(ratio, scenario, emp, pred)
+
+ggplot(both_ratio, aes(x = ratio, colour = scenario)) +
+  geom_hline(yintercept = 100 / sqrt(100), linetype = "dotted",
+             colour = "grey40", linewidth = 0.8) +
+  geom_line(aes(y = pred), linewidth = 0.9) +
+  geom_point(aes(y = emp), size = 2.6) +
+  scale_colour_manual(values = c("Without tablet error" = col_off,
+                                 "With tablet error"    = col_on)) +
+  scale_x_log10(breaks = c(1, 2, 3, 6, 10, 30, 60)) +
+  labs(x = "Target-to-marker ratio (log scale)",
+       y = "Error (%)",
+       colour = NULL) +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom")
+```
+
+
+
+## Two-dimensional parameter grid
+
+Figure \ref{fig:fig8} shows the simulated error across the grid with tablet variability included: seven target-to-marker ratios against six stopping thresholds.(See Appendix A.5 and B.9)
+
+```{r fig8, fig.cap="Heatmap of simulated total error (\\% ) across the grid with tablet variability. \\label{fig:fig8}", fig.height=4.5, fig.width=7}
+grid_on$cv_label <- sprintf("%.1f", grid_on$empirical_cv)
+
+ggplot(grid_on, aes(x = factor(threshold), y = factor(ratio), fill = empirical_cv)) +
+  geom_tile(colour = "white", linewidth = 0.5) +
+  geom_text(aes(label  = cv_label,
+                colour = ifelse(empirical_cv > 35, "white", "black")),
+            size = 3.5) +
+  scale_fill_distiller(palette = "YlOrRd", direction = 1,
+                       name = "Simulated error\n(%)") +
+  scale_colour_identity() +
+  labs(x = "Stopping threshold k", y = "Target-to-marker ratio") +
+  theme_minimal(base_size = 11) +
+  theme(panel.grid = element_blank(), legend.position = "right")
+```
+  
+
+## Determining number of slides
+
+Figure \ref{fig:conv} shows the RMSE of the concentration estimate, as a percentage of the true value, against the number of simulated slides (ratio = 1 and k=5). (See Appendix A.6 and B.10)
+
+```{r conv, fig.cap="Plot of RMSE against the number of simulated slides. \\label{fig:conv}", fig.height=3.8, fig.width=6, out.width="70%"}
+sim_est <- read.csv("./data/sim_estimates_2.csv")
+true_c_conv <- 12489     
+est <- sim_est$estimate
+sq_err      <- (est - true_c_conv)^2
+running_pct <- 100 * sqrt(cumsum(sq_err) / seq_along(sq_err)) / true_c_conv
+conv <- tibble(iteration = seq_along(est), rmse_pct = running_pct)
+
+ggplot(conv, aes(x = iteration, y = rmse_pct)) +
+  geom_line(colour = col_off, linewidth = 0.8) +
+  geom_vline(xintercept = 10000, linetype = "dotted", colour = "grey40") +
+  labs(x = "Number of simulated slides", y = "RMSE (% of true value)") +
+  theme_minimal(base_size = 11)
+```
+
+# Discussion
+
+
+Before explaining the results, we look at two checks that establish the simulation is valid.
+First, the simulated slides were verified against the theoretical distribution (Figure \ref{fig:poisson}). We clearly observe that both the empirical and theoretical distributions match closely with each other, telling us that they follow a homogeneous Poisson process.
+
+Second, looking at the Figure \ref{fig:conv}, we see that initially the error fluctuates in the first 1000 to 2000 slides and then settles down gradually, and after that the curve is almost smooth and changes only slightly within a narrow band. So we conclude that around 10000 slides is a sufficient value to achieve stable results.
+
+The rest of the results answer the questions set out in the introduction.
+
+First, looking at the Table \ref{tab:tbl1}, we observe that the average estimate lies 0.07  of the true concentration of 24978, so the linear method closely approximates the true concentration. The error predicted from the Equation \ref{eq:error} gives us 12.25\%, and the error from the simulation (Equation \ref{eq:simerror}) directly gives us 12.38\%, giving only a difference of 0.13, telling us that the formula correctly predicts the error estimates.
+
+Introducing tablet variability, we observe that the Simulated error increases to 12.73\% and the Formula error to 12.86\%. Comparing both with and without tablet variability, the Simulated error increases by 0.35, while the predicted error increases by 0.61. We can justify the predicted rise of error directly from the formula $\sqrt{12.25^2 + 3.93^2} = 12.86$. So Tablet variability makes only a small difference in the calculation.
+
+Next looking at the Figure \ref{fig:fig5} and Table \ref{tab:tbl3}  we can conclude that
+Precision is controlled by how many markers are counted and not by the target-to-marker ratio. As we observe in Figure \ref{fig:fig5}, when the stopping threshold increases, the simulated error decreases. From $k=10$ to $k=400$, the simulated error falls sharply from 38.85\% to 5.98\%. While looking at Figure \ref{fig:fig7}, where we vary the ratio, the simulated error decreases but at a lesser rate from 14.07\% to 10.12\%, a decrease of about 3.95. Most of this change is seen early from ratio 1 to 3, where the error drops by 2.55, whereas a twenty-fold increase further increases, up to ratio 60, reduces it by only 1.4 more. The grid (Figure \ref{fig:fig8}) also confirms this finding: Reading across the row as the threshold increases, the error decreases sharply, while reading across the column, the error decreases but only slightly. 
+
+Two things that we notice from each of these are that the stopping thresholds vary at $k=800$, no result is produced, and this is because of the finite population of markers present in the window. As the window is a small portion of the slide, it ran out of markers in the strip before the count was completed. While in the target marker ratio vary The simulated error floors are at about 10\%. This can be explained using the error formula. Increasing the ratio increases the total fossils count, shrinking the $1/\sqrt{x}$ toward zero, the marker count stays fixed at the threshold, so the marker term does not change. Hence, the marker term with k=100 becomes $1/\sqrt{100}=0.10$, so a floor of 10\%, which the simulation approaches.
+
+Across the range, we also observe that the formula correctly predicts the error. The simulated and the formula error agree closely with relative errors around 1\% to 2\%. At the higher threshold, specifically after $k=600$, the relative error approximates to 18\% and 45\% at $k=700$, this is again because the slide runs out of markers before the count is completed.
+
+Several extensions can be made in future work. First, the simulation uses a single tablet dose per slide, so what would happen if multiple tablets are used? Secondly, the particles are placed as a homogeneous Poisson process; real slides may contain clumping or uneven spreading, so repeating this with other distributions would show how far the formula holds and how the error varies.
+
+To conclude, this project simulated the process of how palynologists estimate concentration. They use a sampling technique by adding markers to the sample and estimating the concentration by scaling up. The project verifies how well the sampling method works by comparing the error from the formula against the error from the simulation, and it further examines how the error changes when different conditions, such as target-to-marker ratio and the stopping threshold, are varied. We find that the threshold is a strong controller for varying errors while the ratio has a weak effect, which does not contradict other studies such as Maher [@MaherLouisJ, p. 158], who recommended a low ratio of 2:1. Furthermore, simulation also confirms that the formula closely follows the simulated error both with and without tablet variability.
+
+\newpage
+# Acknowledgements
+
+I thank my supervisor, Dr Anthony Mays, for his guidance throughout this project.
+https://github.com/rafayahmedone-rgb/MDSresearch_Final_Report_Ahmed_R-.git
+
+# References
+
+<div id="refs"></div>
+
+\newpage
+
+# Statistical appendix
+
+All results in this report are produced by the simulation code below.
+
+## Appendix A: Experiment code
+
+### Appendix A.1: The linear counting method
+
+This is the counting core reused by every experiment.
+Source: `numbers_increased.R`
+writes: `comparison_baseline_1.csv`
+
+```{r, eval=FALSE, echo=TRUE}
+# Linear Counting Simulation 
+# Baseline table comparison of tablet variability 
+# from numbers_increased.R
+
+library(tibble)
+library(ggplot2)
+set.seed(42)
+# fossil grains (targets) per slide
+n_targets        <- 24978  
+# marker grains per slide
+n_markers        <- 12489   
+# height of the counting strip
+strip_height     <- 0.05 
+# k: stop once this many markers are in the counted window
+stop_threshold <- 100 
+# V in the concentration formula (unit volume)
+V  <- 1 
+# number of simulations
+num_slides       <- 10000 
+
+# Marker dose parameters
+marker_label <- n_markers                       
+tablet_cv    <- 491 / 12489                     
+marker_sd    <- marker_label * tablet_cv         
+
+# Storage
+estimates_on  <- numeric(num_slides) 
+x_counts_on   <- numeric(num_slides) 
+n_counts_on   <- numeric(num_slides)
+actual_doses  <- numeric(num_slides)
+
+=====================================
+# TABLET ERROR ON 
+# marker dose varies slide to slide 
+=====================================
+cat("TABLET ERROR ON (", num_slides, "slides) \n")
+start_t <- Sys.time()
+
+for (s in 1:num_slides) {
+  
+  # marker dose drawn from the tablet distribution
+  n_markers_actual <- round(rnorm(1, mean = marker_label, sd = marker_sd))
+  if (n_markers_actual < 1) n_markers_actual <- 1
+  actual_doses[s] <- n_markers_actual
+  
+  targets <- tibble(x = runif(n_targets, 0, 1),
+                    y = runif(n_targets, 0, 1),
+                    type = "target")
+  markers <- tibble(x = runif(n_markers_actual, 0, 1),
+                    y = runif(n_markers_actual, 0, 1),
+                    type = "marker")
+  slide <- rbind(targets, markers)
+  # Keep only markers inside the strip height 
+  markers_in_strip <- markers[markers$y <= strip_height, ]   
+  markers_in_strip <- markers_in_strip[order(markers_in_strip$x), ] 
+  # if not enough markers then na 
+  if (nrow(markers_in_strip) < stop_threshold) {
+    estimates_on[s] <- NA; x_counts_on[s] <- NA; n_counts_on[s] <- NA
+    next
+  }
+  
+  x_end <- markers_in_strip$x[stop_threshold]
+  in_window  <- slide$y <= strip_height & slide$x <= x_end
+  x_count <- sum(slide$type == "target" & in_window)
+  n_count <- sum(slide$type == "marker" & in_window)
+  
+  
+  estimates_on[s] <- (x_count * marker_label) / (n_count * V)
+  x_counts_on[s]  <- x_count
+  n_counts_on[s]  <- n_count
+  
+  if (s %% 10000 == 0) cat("  slide", s, "of", num_slides, "\n")
+}
+
+cat("Run A finished in:", format(Sys.time() - start_t), "\n\n")
+
+
+# Analysis 
+true_concentration <- n_targets / V
+# Empirical measured from simulation
+mean_on <- mean(estimates_on, na.rm = TRUE) 
+sd_on   <- sd(estimates_on, na.rm = TRUE)
+cv_on   <- 100 * sd_on / mean_on
+
+mean_x <- mean(x_counts_on, na.rm = TRUE)
+mean_n <- stop_threshold
+s1P    <- tablet_cv
+# Predicted from mays formula 
+
+T_term <- s1P / sqrt(1)                  
+F_term <- sqrt(mean_x) / mean_x          
+M_term <- sqrt(mean_n) / mean_n          
+predicted_cv_on <- 100 * sqrt(T_term^2 + F_term^2 + M_term^2)
+
+rel_error_on <- 100 * (mean_on - true_concentration) / true_concentration
+acc_cv_on    <- 100 * abs(predicted_cv_on - cv_on) / cv_on
+
+==============================
+# TABLET ERROR not included
+# marker dose fixed 
+==============================
+estimates_off <- numeric(num_slides)
+x_counts_off  <- numeric(num_slides)
+n_counts_off  <- numeric(num_slides)
+
+cat(" TABLET ERROR OFF (", num_slides, "slides) \n")
+start_t <- Sys.time()
+
+for (s in 1:num_slides) {
+  
+  n_markers_fixed <- marker_label   
+  
+  targets <- tibble(x = runif(n_targets, 0, 1),
+                    y = runif(n_targets, 0, 1),
+                    type = "target")
+  markers <- tibble(x = runif(n_markers_fixed, 0, 1),
+                    y = runif(n_markers_fixed, 0, 1),
+                    type = "marker")
+  slide <- rbind(targets, markers)
+  
+  markers_in_strip <- markers[markers$y <= strip_height, ]
+  markers_in_strip <- markers_in_strip[order(markers_in_strip$x), ]
+  
+  if (nrow(markers_in_strip) < stop_threshold) {
+    estimates_off[s] <- NA; x_counts_off[s] <- NA; n_counts_off[s] <- NA
+    next
+  }
+  
+  x_end <- markers_in_strip$x[stop_threshold]
+  in_window  <- slide$y <= strip_height & slide$x <= x_end
+  x_count <- sum(slide$type == "target" & in_window)
+  n_count <- sum(slide$type == "marker" & in_window)
+  
+  estimates_off[s] <- (x_count * marker_label) / (n_count * V)
+  x_counts_off[s]  <- x_count
+  n_counts_off[s]  <- n_count
+  
+  if (s %% 10000 == 0) cat("  slide", s, "of", num_slides, "\n")
+}
+
+cat("Run B finished in:", format(Sys.time() - start_t), "\n\n")
+
+
+# Analysis
+mean_off <- mean(estimates_off, na.rm = TRUE)
+sd_off   <- sd(estimates_off, na.rm = TRUE)
+cv_off   <- 100 * sd_off / mean_off
+
+mean_x_off <- mean(x_counts_off, na.rm = TRUE)
+predicted_cv_off <- 100 * sqrt(
+  (0)^2 +
+    (sqrt(mean_x_off) / mean_x_off)^2 +
+    (sqrt(stop_threshold) / stop_threshold)^2
+)
+
+rel_error_off <- 100 * (mean_off - true_concentration) / true_concentration
+acc_cv_off    <- 100 * abs(predicted_cv_off - cv_off) / cv_off
+
+
+====================
+# COMPARISON TABLE
+====================
+
+comparison1 <- tibble(
+  quantity = c("True concentration",
+               "Mean estimate",
+               "Signed relative error of mean (%)",
+               "Empirical CV (%)",
+               "Predicted CV (%)",
+               "CV Difference ",
+               "Absolute accuracy of CV (%)",
+               "Empirical SD"),
+  without_tablet = c(true_concentration,
+                     round(mean_off, 1),
+                     round(rel_error_off, 4),
+                     round(cv_off, 2),
+                     round(predicted_cv_off, 2),
+                     round(abs(cv_off - predicted_cv_off), 2),
+                     round(acc_cv_off, 2),
+                     round(sd_off, 1)),
+  with_tablet    = c(true_concentration,
+                     round(mean_on, 1),
+                     round(rel_error_on, 4),
+                     round(cv_on, 2),
+                     round(predicted_cv_on, 2),
+                     round(abs(cv_on - predicted_cv_on), 2),
+                     round(acc_cv_on, 2),
+                     round(sd_on, 1))
+)
+
+print(comparison1)
+write.csv(comparison1, "comparison_baseline_1.csv",  row.names=FALSE)
+
+```
+
+
+### Appendix A.2: Verification of the Poisson assumption
+
+Source: `finalizing_code.R`. 
+writes: `ied_df.csv`, `pooled_nn.csv`, `theory_df.csv`
+
+```{r, eval=FALSE, echo=TRUE}
+# Verification of poison
+# from finalizing_code.R
+
+library(tibble)
+library(ggplot2)
+library(spatstat)
+set.seed(42)
+
+# Generate many simulated Poisson slides
+
+n_points        <- 100  
+num_simulations <- 50    
+
+
+# Diggle's theoretical CDF 
+diggle_cdf <- function(t) {
+  H <- numeric(length(t))
+  
+  # First piece: 0 <= t <= 1
+  i1 <- t >= 0 & t <= 1  
+  H[i1] <- pi * t[i1]^2 - 8 * t[i1]^3 / 3 + t[i1]^4 / 2 
+  
+  # Second piece: 1 < t <= sqrt(2)
+  i2 <- t > 1 & t <= sqrt(2)
+  tt <- t[i2]  
+  arg <- pmax(pmin(2 / tt^2 - 1, 1), -1)   
+  H[i2] <- 1/3 - 2 * tt^2 - tt^4 / 2 +
+    4 * sqrt(tt^2 - 1) * (2 * tt^2 + 1) / 3 +
+    2 * tt^2 * asin(arg)
+  
+  # Beyond sqrt(2), CDF is 1
+  H[t > sqrt(2)] <- 1
+  
+  H
+}
+
+all_distances <- vector("list", num_simulations)   
+
+for (i in 1:num_simulations) {
+  pts <- tibble(x = runif(n_points, 0, 1),     
+                y = runif(n_points, 0, 1))
+  all_distances[[i]] <- as.vector(dist(pts))    
+}
+
+
+
+pooled_distances <- unlist(all_distances)
+
+ied_df <- tibble(
+  d   = sort(pooled_distances),
+  emp = seq_along(pooled_distances) / length(pooled_distances)
+)
+
+
+
+# NEAREST-NEIGHBOUR DISTANCE VERIFICATION
+# compare the theoretical diggle with the simulation nearest neighbour
+
+
+all_nn <- vector("list", num_simulations)
+
+for (i in 1:num_simulations) {
+  pts <- tibble(x = runif(n_points, 0, 1),
+                y = runif(n_points, 0, 1))
+  all_nn[[i]] <- nndist(pts$x, pts$y)
+}
+
+pooled_nn <- unlist(all_nn)
+
+
+# Diggle's Nearest neighbour 
+
+diggle_nn_cdf <- function(y, n) {
+  1 - exp(-n * pi * y^2)
+}
+
+nn_density <- function(y, n) 2 * n * pi * y * exp(-n * pi * y^2)
+
+
+y_seq     <- seq(0, max(pooled_nn) * 1.05, length.out = 300)
+theory_df <- tibble(y = y_seq, density = nn_density(y_seq, n_points ))
+
+# Save everything
+dir.create("data", showWarnings = FALSE)
+write.csv(ied_df,"ied_df.csv",     row.names = FALSE)
+write.csv(data.frame(nn = pooled_nn), "pooled_nn.csv",  row.names = FALSE)
+write.csv(theory_df, "theory_df.csv",  row.names = FALSE)
+cat("Saved ied_df.csv, pooled_nn.csv, theory_df.csv to data/\n")
+
+
+```
+
+
+### Appendix A.3: Stopping-threshold sweep
+
+Source: `numbers_increased.R`. 
+Writes: `comparison_threshold_10to800.csv`.
+
+```{r, eval=FALSE, echo=TRUE}
+#number_increased.R
+# THRESHOLD SWEEP WITH TABLET ERROR
+
+# Thresholds to test
+thresholds <- c(10,25,50,100,200,400,500,600,700,800)
+
+sweep_off <- tibble()
+sweep_on  <- tibble()
+
+# TABLET ERROR not included 
+cat("THRESHOLD SWEEP — TABLET ERROR OFF\n")
+start_t <- Sys.time()
+
+for (thresh in thresholds) {
+  
+  cat("  threshold =", thresh, "\n")
+  
+  estimates <- numeric(num_slides)
+  x_counts  <- numeric(num_slides)
+  
+  for (s in 1:num_slides) {
+    targets <- tibble(x = runif(n_targets),
+                y = runif(n_targets), type = "target")
+    markers <- tibble(x = runif(marker_label),
+                y = runif(marker_label), type = "marker")
+    slide <- rbind(targets, markers)
+    
+    markers_in_strip <- markers[markers$y <= strip_height, ]
+    markers_in_strip <- markers_in_strip[order(markers_in_strip$x), ]
+    
+    if (nrow(markers_in_strip) < thresh) { estimates[s] <- NA;
+    x_counts[s] <- NA; next }
+    
+    x_end <- markers_in_strip$x[thresh]
+    in_window  <- slide$y <= strip_height & slide$x <= x_end
+    x_count <- sum(slide$type == "target" & in_window)
+    n_count <- sum(slide$type == "marker" & in_window)
+    
+    estimates[s] <- (x_count * marker_label) / (n_count * V)
+    x_counts[s]  <- x_count
+  }
+  
+  true_c   <- n_targets / V
+  emp_mean <- mean(estimates, na.rm = TRUE)
+  emp_sd   <- sd(estimates, na.rm = TRUE)
+  emp_cv   <- 100 * emp_sd / emp_mean
+  
+  mean_x <- mean(x_counts, na.rm = TRUE)
+  pred_cv <- 100 * sqrt(
+    (0)^2 +
+      (sqrt(mean_x) / mean_x)^2 +
+      (sqrt(thresh) / thresh)^2
+  )
+  
+  rel_err  <- 100 * (emp_mean - true_c) / true_c
+  acc_conc <- 100 * abs(emp_mean - true_c) / true_c
+  acc_cv   <- 100 * abs(pred_cv - emp_cv) / emp_cv
+  
+  sweep_off <- rbind(sweep_off, tibble(
+    threshold    = thresh,
+    mean_x       = round(mean_x, 1),
+    empirical_cv = round(emp_cv, 2),
+    predicted_cv = round(pred_cv, 2),
+    cv_agreement = round(abs(emp_cv - pred_cv), 2),
+    acc_cv       = round(acc_cv, 2),
+    rel_error    = round(rel_err, 4),
+    acc_conc     = round(acc_conc, 4),
+    scenario     = "Without tablet error"
+  ))
+}
+
+cat("Run 1 finished in:", format(Sys.time() - start_t), "\n\n")
+write.csv(sweep_off, "sweep_off_10to800.csv", row.names = FALSE)
+
+
+
+# TABLET ERROR included 
+cat("THRESHOLD SWEEP — TABLET ERROR ON \n")
+start_t <- Sys.time()
+
+for (thresh in thresholds) {
+  
+  cat("  threshold =", thresh, "\n")
+  
+  estimates <- numeric(num_slides)
+  x_counts  <- numeric(num_slides)
+  
+  for (s in 1:num_slides) {
+    
+    n_markers_actual <- round(rnorm(1, mean = marker_label, sd = marker_sd))
+    if (n_markers_actual < 1) n_markers_actual <- 1
+    
+    targets <- tibble(x = runif(n_targets),
+                  y = runif(n_targets), type = "target")
+    markers <- tibble(x = runif(n_markers_actual),
+                  y = runif(n_markers_actual), type = "marker")
+    slide <- rbind(targets, markers)
+    
+    markers_in_strip <- markers[markers$y <= strip_height, ]
+    markers_in_strip <- markers_in_strip[order(markers_in_strip$x), ]
+    
+    if (nrow(markers_in_strip) < thresh) { estimates[s] <- NA;
+    x_counts[s] <- NA; next }
+    
+    x_end <- markers_in_strip$x[thresh]
+    in_window  <- slide$y <= strip_height & slide$x <= x_end
+    x_count <- sum(slide$type == "target" & in_window)
+    n_count <- sum(slide$type == "marker" & in_window)
+    
+    estimates[s] <- (x_count * marker_label) / (n_count * V)
+    x_counts[s]  <- x_count
+  }
+  
+  true_c   <- n_targets / V
+  emp_mean <- mean(estimates, na.rm = TRUE)
+  emp_sd   <- sd(estimates, na.rm = TRUE)
+  emp_cv   <- 100 * emp_sd / emp_mean
+  
+  mean_x <- mean(x_counts, na.rm = TRUE)
+  pred_cv <- 100 * sqrt(
+    (tablet_cv / sqrt(1))^2 +
+      (sqrt(mean_x) / mean_x)^2 +
+      (sqrt(thresh) / thresh)^2
+  )
+  
+  rel_err  <- 100 * (emp_mean - true_c) / true_c
+  acc_conc <- 100 * abs(emp_mean - true_c) / true_c
+  acc_cv   <- 100 * abs(pred_cv - emp_cv) / emp_cv
+  
+  sweep_on <- rbind(sweep_on, tibble(
+    threshold    = thresh,
+    mean_x       = round(mean_x, 1),
+    empirical_cv = round(emp_cv, 2),
+    predicted_cv = round(pred_cv, 2),
+    cv_agreement = round(abs(emp_cv - pred_cv), 2),
+    acc_cv       = round(acc_cv, 2),
+    rel_error    = round(rel_err, 4),
+    acc_conc     = round(acc_conc, 4),
+    scenario     = "With tablet error"
+  ))
+}
+
+write.csv(sweep_on, "sweep_on_10to800.csv", row.names = FALSE)
+cat("Run 2 finished in:", format(Sys.time() - start_t), "\n\n")
+
+
+
+# COMPARISON TABLE
+comparison2 <- tibble(
+  threshold     = sweep_off$threshold,
+  cv_off        = sweep_off$empirical_cv,
+  cv_on         = sweep_on$empirical_cv,
+  cv_difference = round(sweep_on$empirical_cv - sweep_off$empirical_cv, 2),
+  pred_off      = sweep_off$predicted_cv,
+  pred_on       = sweep_on$predicted_cv,
+  acc_cv_off    = sweep_off$acc_cv,
+  acc_cv_on     = sweep_on$acc_cv
+)
+
+print(comparison2)
+write.csv(comparison2, "comparison_threshold_10to800.csv",  row.names=FALSE)
+```
+
+### Appendix A.4: Target-to-marker ratio sweep
+
+Source: `numbers_increased.R`.
+Writes: `comparison_ratio_2.csv`
+
+```{r, eval=FALSE, echo=TRUE}
+
+# TARGET-TO-MARKER RATIO SWEEP
+# Ratios to test
+ratios <- c(1, 2, 3, 6, 10, 30, 60)
+
+
+ratio_off <- tibble()
+ratio_on  <- tibble()
+
+# TABLET ERROR Not included 
+cat("RATIO SWEEP — TABLET ERROR OFF\n")
+start_t <- Sys.time()
+
+for (r in ratios) {
+  
+  n_targets_r <- r * n_markers
+  true_c    <- n_targets_r / V
+  
+  cat("  ratio =", r, " (n_targets =", n_targets_r, ")\n")
+  
+  estimates <- numeric(num_slides)
+  x_counts  <- numeric(num_slides)
+  
+  for (s in 1:num_slides) {
+    targets <- tibble(x = runif(n_targets_r),
+                  y = runif(n_targets_r), type = "target")
+    markers <- tibble(x = runif(n_markers), 
+                  y = runif(n_markers), type = "marker")
+    slide <- rbind(targets, markers)
+    
+    markers_in_strip <- markers[markers$y <= strip_height, ]
+    markers_in_strip <- markers_in_strip[order(markers_in_strip$x), ]
+    
+    if (nrow(markers_in_strip) < stop_threshold) { 
+      estimates[s] <- NA; x_counts[s] <- NA; next 
+    }
+    
+    x_end <- markers_in_strip$x[stop_threshold]
+    in_window  <- slide$y <= strip_height & slide$x <= x_end
+    x_count <- sum(slide$type == "target" & in_window)
+    n_count <- sum(slide$type == "marker" & in_window)
+    
+    estimates[s] <- (x_count * marker_label) / (n_count * V)
+    x_counts[s]  <- x_count
+  }
+  
+  emp_mean <- mean(estimates, na.rm = TRUE)
+  emp_sd   <- sd(estimates, na.rm = TRUE)
+  emp_cv   <- 100 * emp_sd / emp_mean
+  
+  mean_x <- mean(x_counts, na.rm = TRUE)
+  pred_cv <- 100 * sqrt(
+    (0)^2 +
+      (sqrt(mean_x) / mean_x)^2 +
+      (sqrt(stop_threshold) / stop_threshold)^2
+  )
+  
+  rel_error       <- 100 * (emp_mean - true_c) / true_c
+  cv_signed_error <- 100 * (pred_cv - emp_cv) / emp_cv
+  
+  ratio_off <- rbind(ratio_off, tibble(
+    ratio           = r,
+    n_targets       = n_targets_r,
+    mean_x          = round(mean_x, 1),
+    empirical_cv    = round(emp_cv, 2),
+    predicted_cv    = round(pred_cv, 2),
+    cv_signed_error = round(cv_signed_error, 2),
+    rel_error       = round(rel_error, 4),
+    failed_slides   = sum(is.na(estimates)),
+    scenario        = "Without tablet error"
+  ))
+}
+
+cat("Run 1 finished in:", format(Sys.time() - start_t), "\n\n")
+write.csv(ratio_off, "ratio_off_2.csv",  row.names=FALSE)
+
+
+# TABLET ERROR Included 
+
+cat(" RATIO SWEEP — TABLET ERROR ON\n")
+start_t <- Sys.time()
+
+for (r in ratios) {
+  
+  n_targets_r <- r * n_markers
+  true_c    <- n_targets / V
+  
+  cat("  ratio =", r, " (n_targets =", n_targets_r, ")\n")
+  
+  estimates <- numeric(num_slides)
+  x_counts  <- numeric(num_slides)
+  
+  for (s in 1:num_slides) {
+    
+    n_markers_actual <- round(rnorm(1, mean = marker_label, sd = marker_sd))
+    if (n_markers_actual < 1) n_markers_actual <- 1
+    
+    targets <- tibble(x = runif(n_targets_r), 
+                  y = runif(n_targets_r), type = "target")
+    markers <- tibble(x = runif(n_markers_actual), 
+                  y = runif(n_markers_actual), type = "marker")
+    slide <- rbind(targets, markers)
+    
+    markers_in_strip <- markers[markers$y <= strip_height, ]
+    markers_in_strip <- markers_in_strip[order(markers_in_strip$x), ]
+    
+    if (nrow(markers_in_strip) < stop_threshold) { 
+      estimates[s] <- NA; x_counts[s] <- NA; next 
+    }
+    
+    x_end <- markers_in_strip$x[stop_threshold]
+    in_window  <- slide$y <= strip_height & slide$x <= x_end
+    x_count <- sum(slide$type == "target" & in_window)
+    n_count <- sum(slide$type == "marker" & in_window)
+    
+    estimates[s] <- (x_count * marker_label) / (n_count * V)
+    x_counts[s]  <- x_count
+  }
+  
+  emp_mean <- mean(estimates, na.rm = TRUE)
+  emp_sd   <- sd(estimates, na.rm = TRUE)
+  emp_cv   <- 100 * emp_sd / emp_mean
+  
+  mean_x <- mean(x_counts, na.rm = TRUE)
+  pred_cv <- 100 * sqrt(
+    (tablet_cv / sqrt(1))^2 +
+      (sqrt(mean_x) / mean_x)^2 +
+      (sqrt(stop_threshold) / stop_threshold)^2
+  )
+  
+  rel_error       <- 100 * (emp_mean - true_c) / true_c
+  cv_signed_error <- 100 * (pred_cv - emp_cv) / emp_cv
+  
+  ratio_on <- rbind(ratio_on, tibble(
+    ratio           = r,
+    n_targets       = n_targets_r,
+    mean_x          = round(mean_x, 1),
+    empirical_cv    = round(emp_cv, 2),
+    predicted_cv    = round(pred_cv, 2),
+    cv_signed_error = round(cv_signed_error, 2),
+    rel_error       = round(rel_error, 4),
+    failed_slides   = sum(is.na(estimates)),
+    scenario        = "With tablet error"
+  ))
+}
+
+cat("Run 2 finished in:", format(Sys.time() - start_t), "\n\n")
+
+write.csv(ratio_on, "ratio_on_2.csv",  row.names=FALSE)
+
+# COMPARISON TABLE
+ratio_comparison <- tibble(
+  ratio            = ratio_off$ratio,
+  cv_off           = ratio_off$empirical_cv,
+  cv_on            = ratio_on$empirical_cv,
+  cv_tablet_effect = round(ratio_on$empirical_cv - ratio_off$empirical_cv, 2),
+  pred_off         = ratio_off$predicted_cv,
+  pred_on          = ratio_on$predicted_cv,
+  cv_error_off     = ratio_off$cv_signed_error,
+  cv_error_on      = ratio_on$cv_signed_error,
+  mean_x_off       = ratio_off$mean_x
+)
+
+print(ratio_comparison)
+
+write.csv(ratio_comparison, "comparison_ratio_2.csv",  row.names=FALSE)
+```
+
+
+### Appendix A.5: Grid sweep
+
+Source: `varying_both_ratio_threhsold.R`. 
+Writes:  `grid_on_final_2.csv`
+
+```{r, eval=FALSE, echo=TRUE}
+# threshold x ratio sweep
+# Both with and without tablet error
+
+
+library(tibble)
+library(ggplot2)
+
+
+n_markers        <- 12489          
+strip_height     <- 0.05
+V                <- 1
+num_slides       <- 10000
+
+marker_label <- n_markers
+tablet_cv    <- 491 / 12489
+marker_sd    <- marker_label * tablet_cv
+
+# Grid axes 
+ratios     <- c(1, 2, 3, 6, 10, 30, 60) # target-to-marker ratios
+thresholds <- c(10, 25, 50, 100, 200, 400) # stopping thresholds k
+
+grid_off <- tibble()
+grid_on  <- tibble()
+
+# TABLET ERROR included 
+
+
+
+cat(" SCENARIO 2 of 2: TABLET ERROR ON  \n")
+scenario_start <- Sys.time()
+
+for (r in ratios) {
+  
+  n_targets <- r * n_markers
+  true_c    <- n_targets / V
+  ratio_start <- Sys.time()
+  
+  cat(paste0("\n--- RATIO ", r, " (n_targets=", n_targets, ") ---\n"))
+  
+  for (thresh in thresholds) {
+    
+    cell_start <- Sys.time()
+    cat(paste0("  k=", thresh, " "))
+    
+    set.seed(42)
+    estimates <- numeric(num_slides)
+    x_counts  <- numeric(num_slides)
+    n_failed  <- 0
+    
+    for (s in 1:num_slides) {
+      
+      # KEY DIFFERENCE: random marker dose per slide
+      n_markers_actual <- round(rnorm(1, mean = marker_label, sd = marker_sd))
+      if (n_markers_actual < 1) n_markers_actual <- 1
+      
+      targets <- tibble(x = runif(n_targets),
+                      y = runif(n_targets), type = "target")
+      markers <- tibble(x = runif(n_markers_actual),
+                    y = runif(n_markers_actual), type = "marker")
+      slide   <- rbind(targets, markers)
+      
+      ms <- markers[markers$y <= strip_height, ]
+      ms <- ms[order(ms$x), ]
+      
+      if (nrow(ms) < thresh) {
+        estimates[s] <- NA; x_counts[s] <- NA
+        n_failed <- n_failed + 1
+        next
+      }
+      
+      x_end   <- ms$x[thresh]
+      in_w    <- slide$y <= strip_height & slide$x <= x_end
+      x_count <- sum(slide$type == "target" & in_w)
+      n_count <- sum(slide$type == "marker" & in_w)
+      
+      # Formula uses LABEL value, not actual dose
+      estimates[s] <- (x_count * marker_label) / (n_count * V)
+      x_counts[s]  <- x_count
+    }
+    
+    # Analysis
+    emp_mean <- mean(estimates, na.rm = TRUE)
+    emp_sd   <- sd(estimates, na.rm = TRUE)
+    emp_cv   <- 100 * emp_sd / emp_mean
+    
+    mean_x <- mean(x_counts, na.rm = TRUE)
+    pred_cv <- 100 * sqrt(
+      (tablet_cv / sqrt(1))^2 +     # T term now non-zero
+        (sqrt(mean_x) / mean_x)^2 +
+        (sqrt(thresh) / thresh)^2
+    )
+    
+    rel_err  <- 100 * (emp_mean - true_c) / true_c
+    
+    grid_on <- rbind(grid_on, tibble(
+      ratio          = r,
+      threshold      = thresh,
+      n_targets      = n_targets,
+      mean_x         = round(mean_x, 1),
+      empirical_cv   = round(emp_cv, 2),
+      predicted_cv   = round(pred_cv, 2),
+      cv_agreement   = round(abs(emp_cv - pred_cv), 2),
+      acc_cv         = round(100 * abs(pred_cv - emp_cv) / emp_cv, 2),
+      rel_error      = round(rel_err, 4),
+      failed_slides  = n_failed,
+      cell_time_sec  = round(as.numeric(Sys.time() - cell_start), 1)
+    ))
+    
+    fail_warn <- if (n_failed > num_slides * 0.01) "  MANY FAILED" else ""
+    cat(paste0(": CV=", round(emp_cv, 2), "%, ",
+               n_failed, " failed, ",
+               round(as.numeric(Sys.time() - cell_start), 1), "s",
+               fail_warn, "\n"))
+  }
+  
+  # Save intermediate after each ratio
+  saveRDS(grid_on, "grid_on_intermediate.rds")
+  cat(paste0("  >> ratio ", r, " done in ",
+             format(Sys.time() - ratio_start), ". Saved intermediate.\n"))
+}
+
+cat(paste0("\n SCENARIO 2 (ON) finished in ",
+           format(Sys.time() - scenario_start), " \n"))
+
+
+
+# FINAL OUTPUT
+
+
+cat(" FINAL RESULTS  \n")
+# Save final results
+
+saveRDS(grid_on,  "grid_on_final_2.rds")
+write.csv(grid_on,  "grid_on_final_2.csv",  row.names = FALSE)
+
+
+```
+
+
+### Appendix A.6: Simulation Stability (number of slides)
+
+Source: `simulation_stability.R`. Writes: `sim_estimates_2.csv`
+
+```{r, eval=FALSE, echo=TRUE}
+library(tibble)
+library(ggplot2)
+n_markers    <- 12489
+ratio        <- 1
+n_targets    <- ratio * n_markers     
+threshold    <- 5                     
+strip_height <- 0.05
+marker_label <- n_markers             
+V            <- 1
+true_c       <- n_targets / V         
+num_slides   <- 20000                 
+
+set.seed(42)
+estimates <- numeric(num_slides)      
+x_counts  <- numeric(num_slides)
+
+for (s in 1:num_slides) {
+  
+  targets <- tibble(x = runif(n_targets), y = runif(n_targets), type = "target")
+  markers <- tibble(x = runif(n_markers), y = runif(n_markers), type = "marker")
+  slide   <- rbind(targets, markers)
+  
+  markers_in_strip <- markers[markers$y <= strip_height, ]
+  markers_in_strip <- markers_in_strip[order(markers_in_strip$x), ]
+  
+  if (nrow(markers_in_strip) < threshold) {
+    estimates[s] <- NA
+    x_counts[s]  <- NA
+    next
+  }
+  
+  x_end     <- markers_in_strip$x[threshold]
+  in_window <- slide$y <= strip_height & slide$x <= x_end
+  x_count   <- sum(slide$type == "target" & in_window)
+  n_count   <- sum(slide$type == "marker" & in_window)
+  
+  estimates[s] <- (x_count * marker_label) / (n_count * V)
+  x_counts[s]  <- x_count
+}
+
+
+summary(estimates)      
+mean(estimates, na.rm = TRUE)   
+sd(estimates, na.rm = TRUE)
+
+
+sim_results <- tibble(iteration = 1:num_slides, estimate = estimates)
+write.csv(sim_results, "sim_estimates_2.csv", row.names = FALSE)
+cat("Saved sim_estimates_2.csv\n")
+```
+
+
+## Appendix B: Figure and table code
+
+### Appendix B.1: The linear counting method visualization
+
+Source: `finalizing_code.R`
+
+```{r, eval=FALSE, echo=TRUE}
+# LINEAR COUNTING PLOT Visualization FIG 1 reference 
+# FROM finalizing_code.R file 
+
+n_targets <- 2000
+n_markers <- 1000
+
+targets <- tibble(x = runif(n_targets, 0, 1),
+                  y = runif(n_targets, 0, 1),
+                  type = "target")
+markers <- tibble(x = runif(n_markers, 0, 1),
+                  y = runif(n_markers, 0, 1),
+                  type = "marker")
+slide <- rbind(targets, markers)
+
+strip_height <- 0.05
+
+markers_in_strip <- markers[markers$y <= strip_height, ]
+markers_in_strip <- markers_in_strip[order(markers_in_strip$x), ]
+
+plot_at_marker <- function(k) {
+  x_end <- markers_in_strip$x[k]
+
+  in_transect <- slide$y <= strip_height & slide$x <= x_end
+  x_count <- sum(slide$type == "target" & in_transect)
+  n_count <- sum(slide$type == "marker" & in_transect)
+  
+  ggplot(slide, aes(x, y, colour = type, shape = type, size = type)) +
+    geom_point() +
+    scale_colour_manual(values = c(target = "grey60", marker = "orange"),
+                        guide = "none") +
+    scale_shape_manual(values = c(target = 16, marker = 18),
+                       guide = "none") +
+    scale_size_manual(values = c(target = 1.2, marker = 2.5),
+                      guide = "none") +
+    annotate("rect",                                       
+             xmin = 0, xmax = x_end,
+             ymin = 0, ymax = strip_height,
+             colour = "red", fill = "red", alpha = 0.15, linewidth = 0.8) +
+    coord_cartesian(xlim = c(0, 0.3), ylim = c(0, 0.15)) +
+    theme_minimal(base_size = 9) +
+    labs(title    = paste0("After ", k, " markers"),
+         subtitle = paste0("x = ", round(x_end, 3),
+                           ", targets = ", x_count))
+}
+
+p1 <- plot_at_marker(3)
+p2 <- plot_at_marker(6)
+p3 <- plot_at_marker(9)
+p4 <- plot_at_marker(10)
+
+(p1 + p2) / (p3 + p4) +
+  plot_annotation(title = "Transect growing until the 10th marker",
+subtitle = "Red rectangle = counted region;
+grey dots = targets; orange diamonds = markers")
+```
+
+### Appendix B.2: Simulated slide 
+
+```{r, eval=FALSE, echo=TRUE}
+set.seed(42)
+# Virtual slide plot
+# from finalizing_code.R
+# Generate one slide with both targets and markers
+n_targets <- 200   #  targets 
+n_markers <- 100   #  markers
+targets <- tibble(x = runif(n_targets, 0, 1),
+            y = runif(n_targets, 0, 1),type = "target")
+markers <- tibble(x = runif(n_markers, 0, 1),
+            y = runif(n_markers, 0, 1),type = "marker")
+slide <- rbind(targets, markers)
+# PLOT SLIDE  
+ggplot(slide, aes(x, y, colour = type, shape = type, size = type)) +
+  geom_point() +
+  scale_colour_manual(values = c(target = "grey50", marker = "orange")) +
+  scale_shape_manual(values = c(target = 16, marker = 18)) +   # shape 
+  scale_size_manual(values = c(target = 1.5, marker = 3)) +
+  coord_equal() +
+  theme_minimal() +
+  labs(title = "A simulated slide with targets and markers",
+       x = "x", y = "y")
+```
+
+### Appendix B.3: Linear counting output 
+
+```{r, eval=FALSE, echo=TRUE}
+comp_baseline |>
+  slice(1, 2, 3, 4, 5) |>
+  mutate(quantity = c("True concentration",
+                      "Estimated concentration",
+                      "Relative error of estimate (%)",
+                      "Simulated error (%)",
+                      "Formula error (%)")) |>
+  kbl(
+    col.names = c("Quantity", 
+            "Without tablet error", "With tablet error"),
+    align     = c("l", "r", "r"),
+    booktabs  = TRUE,
+    caption   = "Output of the linear counting simulation,
+with and without tablet variability. \\label{tab:tbl1}"
+  ) |>
+  kable_styling(latex_options = c("striped",
+          "Hold_position"), font_size = 10)
+```
+
+### Appendix B.4: Poisson verification plot 
+
+```{r, eval=FALSE, echo=TRUE}
+p1 <- ggplot(ied_df, aes(x = d)) +
+  geom_step(aes(y = emp), colour = col_off, linewidth = 0.9) +
+  geom_line(aes(y = th),  colour = "red",   linewidth = 1) +
+  labs(title    = "Inter-event distances",
+       subtitle = "Blue = empirical CDF, Red = Theoretical",
+       x = "Distance t", y = "H(t)") +
+  theme_minimal(base_size = 10)
+
+p3 <- ggplot(pooled_nn, aes(x = nn)) +
+  geom_histogram(aes(y = after_stat(density)),
+                 bins = 40, fill = "lightblue",
+                 colour = "black", linewidth = 0.2) +
+  geom_line(data = theory_df, aes(x = y, y = density),
+            colour = "red", linewidth = 1) +
+  labs(title    = "Nearest-neighbour distance distribution",
+       subtitle = "Histogram = empirical, Red = Theoretical Poisson density ",
+       x = "Nearest-neighbour distance y", y = "Density") +
+  theme_minimal(base_size = 10)
+
+p1 / p3
+```
+
+### Appendix B.5: Stopping-threshold table 
+
+```{r, eval=FALSE, echo=TRUE}
+comp_threshold <- read.csv("./data/comparison_threshold_10to800.csv")
+comp_threshold |>
+  select(threshold, cv_off, pred_off, acc_cv_off, cv_on, pred_on, acc_cv_on) |>
+  kbl(
+    col.names = c("$k$",
+                  "Simulated (\\%)", "Formula (\\%)", "Diff. (\\%)",
+                  "Simulated (\\%)", "Formula (\\%)", "Diff. (\\%)"),
+    align    = rep("r", 7),
+    booktabs = TRUE,
+    escape   = FALSE,
+    caption  = "Error against the stopping threshold, 
+  measured from the simulation and predicted by the formula, 
+with and without tablet variability.
+The final column in each pair is the relative 
+difference between the two. \\label{tab:tbl3}"
+  ) |>
+  kable_styling(latex_options = c("striped", "hold_position", "scale_down"),
+                font_size = 9) |>
+  add_header_above(c(" " = 1,
+                     "Without tablet error" = 3,
+                     "With tablet error" = 3))
+```
+
+### Appendix B.6: Stopping-threshold plot 
+
+```{r, eval=FALSE, echo=TRUE}
+comp_threshold <- read.csv("./data/comparison_threshold_10to800.csv")
+both_thresh <- bind_rows(
+  comp_threshold |> mutate(scenario = "Without tablet error", 
+    emp = cv_off, pred = pred_off),
+  comp_threshold |> mutate(scenario = "With tablet error", 
+  emp = cv_on,  pred = pred_on)
+) |> select(threshold, scenario, emp, pred)
+
+ggplot(both_thresh, aes(x = threshold, colour = scenario)) +
+  geom_vline(xintercept = 500, linetype = "dotted", colour = "grey40") +
+  geom_line(aes(y = pred), linewidth = 0.9) +
+  geom_point(aes(y = emp), size = 2.6) +
+  scale_colour_manual(values = c("Without tablet error" = col_off,
+                                 "With tablet error"    = col_on)) +
+  scale_x_log10(breaks = c(10, 25, 50, 100, 200, 400, 800)) +
+  labs(x = "Stopping threshold k (log scale)",
+       y = "Error (%)",
+       colour = NULL) +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom")
+```
+
+### Appendix B.7: Ratio table 
+
+```{r, eval=FALSE, echo=TRUE}
+comp_ratio    <- read.csv("./data/comparison_ratio_2.csv")
+comp_ratio |>
+  select(ratio, cv_off, pred_off,cv_error_off, cv_on, pred_on,cv_error_on) |>
+  kbl(
+    col.names = c("Ratio",
+                  "Simulated error (\\%)", "Formula error (\\%)","Diff. (\\%)",
+                  "Simulated error (\\%)", "Formula error (\\%)","Diff. (\\%)"),
+    align    = c("r", "r", "r", "r", "r"),
+    booktabs = TRUE,
+    escape   = FALSE,
+    caption  = "Error against the target-to-marker ratio,
+    measured from the simulation 
+    and predicted by the formula,
+    with and without tablet 
+    variability. \\label{tab:tbl4}"
+  ) |>
+  kable_styling(latex_options = c("striped", "hold_position", "scale_down"),
+                font_size = 9) |>
+  add_header_above(c(" " = 1,
+                     "Without tablet error" = 3,
+                     "With tablet error" = 3))
+```
+
+### Appendix B.8: Ratio plot 
+
+```{r, eval=FALSE, echo=TRUE}
+comp_ratio    <- read.csv("./data/comparison_ratio_2.csv")
+both_ratio <- bind_rows(
+  comp_ratio |> mutate(scenario = "Without tablet error",
+  emp = cv_off, pred = pred_off),
+  comp_ratio |> mutate(scenario = "With tablet error",
+  emp = cv_on,  pred = pred_on)
+) |> select(ratio, scenario, emp, pred)
+
+ggplot(both_ratio, aes(x = ratio, colour = scenario)) +
+  geom_hline(yintercept = 100 / sqrt(100), linetype = "dotted",
+             colour = "grey40", linewidth = 0.8) +
+  geom_line(aes(y = pred), linewidth = 0.9) +
+  geom_point(aes(y = emp), size = 2.6) +
+  scale_colour_manual(values = c("Without tablet error" = col_off,
+                                 "With tablet error"    = col_on)) +
+  scale_x_log10(breaks = c(1, 2, 3, 6, 10, 30, 60)) +
+  labs(x = "Target-to-marker ratio (log scale)",
+       y = "Error (%)",
+       colour = NULL) +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom")
+```
+
+### Appendix B.9: Parameter-grid heatmap 
+
+```{r, eval=FALSE, echo=TRUE}
+grid_on       <- read.csv("./data/grid_on_final_2.csv")
+grid_on$cv_label <- sprintf("%.1f", grid_on$empirical_cv)
+
+ggplot(grid_on, aes(x = factor(threshold),
+    y = factor(ratio), fill = empirical_cv)) +
+  geom_tile(colour = "white", linewidth = 0.5) +
+  geom_text(aes(label  = cv_label,
+                colour = ifelse(empirical_cv > 35, "white", "black")),
+            size = 3.5) +
+  scale_fill_distiller(palette = "YlOrRd", direction = 1,
+                       name = "Simulated error\n(%)") +
+  scale_colour_identity() +
+  labs(x = "Stopping threshold k", y = "Target-to-marker ratio") +
+  theme_minimal(base_size = 11) +
+  theme(panel.grid = element_blank(), legend.position = "right")
+```
+
+### Appendix B.10: Simulation-stability plot 
+```{r, eval=FALSE, echo=TRUE}
+sim_est <- read.csv("./data/sim_estimates_2.csv")
+true_c_conv <- 12489     
+est <- sim_est$estimate
+sq_err      <- (est - true_c_conv)^2
+running_pct <- 100 * sqrt(cumsum(sq_err) / seq_along(sq_err)) / true_c_conv
+conv <- tibble(iteration = seq_along(est), rmse_pct = running_pct)
+
+ggplot(conv, aes(x = iteration, y = rmse_pct)) +
+  geom_line(colour = col_off, linewidth = 0.8) +
+  geom_vline(xintercept = 10000, linetype = "dotted", colour = "grey40") +
+  labs(x = "Number of simulated slides", y = "RMSE (% of true value)") +
+  theme_minimal(base_size = 11)
+```
+
+
