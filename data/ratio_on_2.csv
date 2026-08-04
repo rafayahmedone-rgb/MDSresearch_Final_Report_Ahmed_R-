@@ -1,0 +1,8 @@
+"ratio","n_targets","mean_x","empirical_cv","predicted_cv","cv_signed_error","rel_error","failed_slides","scenario"
+1,12489,100.1,14.67,14.68,0.03,-49.95,0,"With tablet error"
+2,24978,199.9,12.95,12.86,-0.64,-0.0538,0,"With tablet error"
+3,37467,300.5,12.33,12.2,-1.11,50.242,0,"With tablet error"
+6,74934,600.1,11.3,11.49,1.75,200.0445,0,"With tablet error"
+10,124890,1001.2,11.21,11.2,-0.13,400.5966,0,"With tablet error"
+30,374670,3010.1,10.91,10.9,-0.06,1405.0322,0,"With tablet error"
+60,749340,5999.4,10.88,10.82,-0.56,2899.7142,0,"With tablet error"

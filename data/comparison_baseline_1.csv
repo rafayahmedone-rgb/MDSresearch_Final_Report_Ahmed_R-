@@ -1,0 +1,9 @@
+"quantity","without_tablet","with_tablet"
+"True concentration",24978,24978
+"Mean estimate",24959.8,25077.9
+"Signed relative error of mean (%)",-0.0727,0.4001
+"Empirical CV (%)",12.38,12.73
+"Predicted CV (%)",12.25,12.86
+"CV Difference ",0.13,0.12
+"Absolute accuracy of CV (%)",1.08,0.96
+"Empirical SD",3090.8,3193
